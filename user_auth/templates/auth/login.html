@@ -1,0 +1,26 @@
+{%extends 'base.html'%}
+
+{%block title%}
+{{block.super}}: {{title}}
+{%endblock%}
+
+
+{%block main%}
+
+<div class="container" style="max-width: 400px;">
+    <h1>Kirish</h1>
+    <form action="#" method="post">
+        {%csrf_token%}
+
+      <p><label for="username">Username:</label>
+        {{form.username}}</p>
+
+      <p><label for="password">Parol:</label>
+        {{form.password}}</p>
+
+      <input type="submit" value="Kirish" />
+    </form>
+  </div>
+
+
+{%endblock main%}

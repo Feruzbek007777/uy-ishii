@@ -7,20 +7,24 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import permission_required, login_required
 from django.contrib.auth import logout
 from django.views import View
+from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
+from django.contrib.auth.mixins import PermissionRequiredMixin
 
+class HomeView(ListView):
+    template_name = "moviesite/main.html"
+    context_object_name = "movies"
+    extra_context = {
+        "title": "Barcha maqolalar",
+    }
+    ordering = ['-created']
 
-class MainView(View):
-    def get(self, request: HttpRequest):
-        messages.info(request, "Xush kelibsiz! Asosiy sahifasidasiz.")
-        genres = Genre.objects.all()
-        movies = Movie.objects.filter(published=True)
+    def get_queryset(self):
+        return Movie.objects.filter(published=True)
 
-        context = {
-            'genres': genres,
-            'movies': movies,
-            'title': 'main',
-        }
-        return render(request, 'moviesite/main.html', context)
+    def get_context_data(self, *, object_list=None, **kwargs):
+        context = super().get_context_data()
+        context["genres"] = Genre.objects.all()
+        return context
 
 
 def about(request: HttpRequest):
@@ -30,54 +34,47 @@ def about(request: HttpRequest):
     return render(request, 'moviesite/about.html', context)
 
 
-def by_genre(request: HttpRequest, genre_id):
-    movies = Movie.objects.filter(genre_id=genre_id, published=True)
-    genres = Genre.objects.all()
-    genre = get_object_or_404(Genre, pk=genre_id)
+class GenreView(HomeView):
+    def get_queryset(self):
+        queryset = Movie.objects.filter(published=True, category_id=self.kwargs.get("movie_id"))
+        return queryset
 
-    context = {
-        'movies': movies,
-        'genres': genres,
-        'title': genre.type,
+
+class MovieDetailDetail(DetailView):
+    model = Movie
+    pk_url_kwarg = "movie_id"
+    extra_context = {
+        "genres": Genre.objects.all(),
     }
-    return render(request, 'moviesite/main.html', context)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data()
+        movie = context.get("news")
+        context["title"] = movie.title
+        return context
 
 
-def by_movie(request: HttpRequest, movie_id):
-    movie = get_object_or_404(Movie, pk=movie_id, published=True)
 
-    movie.views += 1
-    movie.save()
+class MovieCreateView(PermissionRequiredMixin, CreateView) :
+    model = Movie
+    form_class = MovieForm
+    template_name = 'moviesite/add_movie.html'
+    permission_required = 'movie.add_movie'
 
-    context = {
-        'movie': movie,
-        'title': movie.title,
-    }
-    return render(request, 'moviesite/movie.html', context)
+    def get_context_data(self, **kwargs) :
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'Film qo\'shish'
+        return context
 
+    def form_valid(self, form) :
+        response = super().form_valid(form)
+        messages.success(self.request, "Maqola muvaffaqiyatli qo'shildi!")
+        return response
 
-@permission_required('movie.add_movie', raise_exception=True)
-def add_movie(request: HttpRequest):
-    if request.user.is_staff:
-        if request.method == 'POST':
-            form = MovieForm(request.POST, files=request.FILES)
-            if form.is_valid():
-                movie = form.save()
-                messages.success(request, "Maqola muvaffaqiyatli qo'shildi!")
-                return redirect("by_movie", movie_id=movie.pk)
-            else:
-                messages.error(request, "Ma'lumotlar qo'shishda xatolik yuz berdi!")
-        else:
-            form = MovieForm()
+#context data oldim va qanaqadir xatolik beryotgandi keyin form esimga tushdi ( ozi
+# dokumentatsiyasida bor ekan form ga ham tekshirish kerak ekan osha yerdan response, from
+# class oshalarni ovoldim ! )
 
-        context = {
-            "form": form,
-            "title": "Film qo'shish"
-        }
-        return render(request, 'moviesite/add_movie.html', context)
-    else:
-        messages.error(request, "Sizda ruxsat yo‘q!")
-        return render(request, '404.html')
 
 
 @permission_required('movie.change_movie', raise_exception=True)
@@ -125,22 +122,19 @@ def delete_movie(request: HttpRequest, movie_id):
         return render(request, '404.html')
 
 
-@login_required
-def profile(request: HttpRequest, username: str):
-    profile_user = get_object_or_404(User, username=username)
-
-    context = {
-        'profile_user': profile_user,
-        'title': str(profile_user.username).title() + " profil"
-    }
-
-    try:
-        profile = Profile.objects.get(user=profile_user)
-        context["profile"] = profile
-    except:
-        pass
-
-    return render(request, 'profile.html', context)
+class ProfileView(View):
+    def get(self, request, username :str):
+        user = get_object_or_404(User, username=username)
+        context = {
+            "user" : user,
+            "title" : str(user.username).title() + " profili"
+        }
+        try :
+            profile = Profile.objects.get(user=user)
+            context["profile"] = profile
+        except :
+            pass
+        return render(request, "profile.html", context)
 
 
 @login_required
